@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>건물주 서바이벌</title>
+    <style>
+        body { background: #222; margin: 0; padding: 0; }
+        #gameCanvas { background: #111; display: block; margin: 30px auto 0 auto; border: 2px solid #fff; }
+        #ui { color: #fff; text-align: center; margin-top: 10px; font-size: 18px; }
+        #restartBtn { display: none; margin-top: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <div id="ui">
+        <span id="time">Time: 0</span> |
+        <span id="hp">HP: 3.0</span> |
+        <span id="score">Score: 0</span>
+        <div><button id="restartBtn">Restart</button></div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
