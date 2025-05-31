@@ -11,8 +11,6 @@ const player = {
     r: 16,
     speed: 3,
     hp: 3.0,
-    lastShot: 0,
-    shotDelay: 350, // ms
 };
 
 // 입력
@@ -38,6 +36,8 @@ let lastEnemySpawn = 0;
 let enemySpawnInterval = 1200;
 let gameOver = false;
 let startTime = null;
+let lastAutoShot = 0;
+const autoShotInterval = 2000; // ms
 
 function resetGame() {
     player.x = width / 2;
@@ -51,6 +51,7 @@ function resetGame() {
     enemySpawnInterval = 1200;
     gameOver = false;
     startTime = null;
+    lastAutoShot = 0;
     document.getElementById('restartBtn').style.display = 'none';
     loop(performance.now());
 }
@@ -73,6 +74,25 @@ canvas.addEventListener('click', e => {
     const rect = canvas.getBoundingClientRect();
     shootProjectile(e.clientX - rect.left, e.clientY - rect.top);
 });
+
+function autoShoot(now) {
+    if (now - lastAutoShot >= autoShotInterval && enemies.length > 0) {
+        // 가장 가까운 적 찾기
+        let minDist = Infinity;
+        let target = null;
+        for (let e of enemies) {
+            let dist = Math.hypot(e.x - player.x, e.y - player.y);
+            if (dist < minDist) {
+                minDist = dist;
+                target = e;
+            }
+        }
+        if (target) {
+            shootProjectile(target.x, target.y);
+            lastAutoShot = now;
+        }
+    }
+}
 
 function spawnEnemy() {
     // 난이도 증가: 시간에 따라 종류, 체력, 속도 증가
@@ -99,7 +119,7 @@ function spawnEnemy() {
     });
 }
 
-function update(dt) {
+function update(dt, now) {
     // 플레이어 이동
     let dx = 0, dy = 0;
     if (keys['w'] || keys['ArrowUp']) dy -= 1;
@@ -113,6 +133,8 @@ function update(dt) {
         player.x = Math.max(player.r, Math.min(width - player.r, player.x));
         player.y = Math.max(player.r, Math.min(height - player.r, player.y));
     }
+    // 자동 공격
+    autoShoot(now);
     // 투사체 이동
     projectiles.forEach(p => {
         p.x += p.dx;
@@ -215,7 +237,7 @@ function loop(now) {
     if (!startTime) startTime = now;
     let dt = now - startTime;
     startTime = now;
-    if (!gameOver) update(dt);
+    if (!gameOver) update(dt, now);
     draw();
     document.getElementById('time').textContent = 'Time: ' + time.toFixed(1);
     document.getElementById('hp').textContent = 'HP: ' + player.hp.toFixed(1);
