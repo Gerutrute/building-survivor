@@ -11,6 +11,9 @@ const player = {
     r: 16,
     speed: 3,
     hp: 3.0,
+    isInvincible: false,
+    invincibleTimer: 0,
+    blink: false,
 };
 
 // 입력
@@ -20,6 +23,7 @@ document.addEventListener('keyup', e => keys[e.key] = false);
 
 // 투사체
 let projectiles = [];
+let projectileCount = 1; // 한 번에 쏘는 탄환 수
 
 // 적
 let enemies = [];
@@ -37,12 +41,16 @@ let enemySpawnInterval = 1200;
 let gameOver = false;
 let startTime = null;
 let lastAutoShot = 0;
-const autoShotInterval = 2000; // ms
+let autoShotInterval = 2000; // ms (최소 200)
 
 function resetGame() {
     player.x = width / 2;
     player.y = height / 2;
     player.hp = 3.0;
+    player.isInvincible = false;
+    player.invincibleTimer = 0;
+    projectileCount = 1;
+    autoShotInterval = 2000;
     projectiles = [];
     enemies = [];
     score = 0;
@@ -58,21 +66,26 @@ function resetGame() {
 
 document.getElementById('restartBtn').onclick = resetGame;
 
-function shootProjectile(targetX, targetY) {
+function shootProjectile(targetX, targetY, count = 1) {
     const angle = Math.atan2(targetY - player.y, targetX - player.x);
-    projectiles.push({
-        x: player.x,
-        y: player.y,
-        dx: Math.cos(angle) * 6,
-        dy: Math.sin(angle) * 6,
-        r: 6,
-    });
+    const spread = Math.PI / 12; // 15도
+    let startAngle = angle - (spread * (count - 1) / 2);
+    for (let i = 0; i < count; i++) {
+        let a = startAngle + spread * i;
+        projectiles.push({
+            x: player.x,
+            y: player.y,
+            dx: Math.cos(a) * 6,
+            dy: Math.sin(a) * 6,
+            r: 6,
+        });
+    }
 }
 
 canvas.addEventListener('click', e => {
     if (gameOver) return;
     const rect = canvas.getBoundingClientRect();
-    shootProjectile(e.clientX - rect.left, e.clientY - rect.top);
+    shootProjectile(e.clientX - rect.left, e.clientY - rect.top, projectileCount);
 });
 
 function autoShoot(now) {
@@ -88,7 +101,7 @@ function autoShoot(now) {
             }
         }
         if (target) {
-            shootProjectile(target.x, target.y);
+            shootProjectile(target.x, target.y, projectileCount);
             lastAutoShot = now;
         }
     }
@@ -133,6 +146,15 @@ function update(dt, now) {
         player.x = Math.max(player.r, Math.min(width - player.r, player.x));
         player.y = Math.max(player.r, Math.min(height - player.r, player.y));
     }
+    // 무적 타이머
+    if (player.isInvincible) {
+        player.invincibleTimer -= dt;
+        player.blink = Math.floor(player.invincibleTimer / 100) % 2 === 0;
+        if (player.invincibleTimer <= 0) {
+            player.isInvincible = false;
+            player.blink = false;
+        }
+    }
     // 자동 공격
     autoShoot(now);
     // 투사체 이동
@@ -158,18 +180,27 @@ function update(dt, now) {
         });
     });
     projectiles = projectiles.filter(p => !p.hit);
-    // 적 제거(죽음)
+    // 적 제거(죽음) 및 강화
     for (let i = enemies.length - 1; i >= 0; i--) {
         if (enemies[i].hp <= 0) {
             score += 1;
+            // 10% 확률로 강화
+            if (Math.random() < 0.1) {
+                if (Math.random() < 0.5 && autoShotInterval > 200) {
+                    autoShotInterval = Math.max(200, autoShotInterval - 100);
+                } else {
+                    projectileCount++;
+                }
+            }
             enemies.splice(i, 1);
         }
     }
     // 적과 플레이어 충돌
     enemies.forEach(e => {
-        if (Math.hypot(e.x - player.x, e.y - player.y) < e.r + player.r) {
+        if (!player.isInvincible && Math.hypot(e.x - player.x, e.y - player.y) < e.r + player.r) {
             player.hp -= 0.5;
-            e.hp = -999;
+            player.isInvincible = true;
+            player.invincibleTimer = 3000; // 3초
         }
     });
     // 시간, 난이도 증가
@@ -190,13 +221,15 @@ function draw() {
     ctx.clearRect(0, 0, width, height);
     // 플레이어
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
-    ctx.fillStyle = '#3498db';
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#fff';
-    ctx.stroke();
+    if (!player.blink) {
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+        ctx.fillStyle = '#3498db';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+    }
     ctx.restore();
     // 투사체
     projectiles.forEach(p => {
