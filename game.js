@@ -33,6 +33,20 @@ let enemyTypes = [
     { color: '#8e44ad', speed: 1.6, hp: 0.7 }, // 빠름
 ];
 
+// 아이템
+let items = [];
+const ITEM_RADIUS = 12;
+
+// 장애물
+let obstacles = [];
+const OBSTACLE_RADIUS = 24;
+const OBSTACLE_TYPES = [
+    { color: '#8d5524' }, // 바위(갈색)
+    { color: '#228B22' }, // 나무(초록)
+];
+let lastObstacleSpawn = 0;
+const obstacleSpawnInterval = 6000; // ms
+
 // 게임 상태
 let score = 0;
 let time = 0;
@@ -53,6 +67,8 @@ function resetGame() {
     autoShotInterval = 2000;
     projectiles = [];
     enemies = [];
+    items = [];
+    obstacles = [];
     score = 0;
     time = 0;
     lastEnemySpawn = 0;
@@ -60,6 +76,7 @@ function resetGame() {
     gameOver = false;
     startTime = null;
     lastAutoShot = 0;
+    lastObstacleSpawn = 0;
     document.getElementById('restartBtn').style.display = 'none';
     loop(performance.now());
 }
@@ -132,6 +149,18 @@ function spawnEnemy() {
     });
 }
 
+function spawnObstacle() {
+    // 맵 바깥에서 랜덤 위치로 스폰
+    let edge = Math.floor(Math.random() * 4);
+    let ox, oy;
+    if (edge === 0) { ox = 0; oy = Math.random() * height; }
+    else if (edge === 1) { ox = width; oy = Math.random() * height; }
+    else if (edge === 2) { ox = Math.random() * width; oy = 0; }
+    else { ox = Math.random() * width; oy = height; }
+    let type = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
+    obstacles.push({ x: ox, y: oy, r: OBSTACLE_RADIUS, color: type.color });
+}
+
 function update(dt, now) {
     // 플레이어 이동
     let dx = 0, dy = 0;
@@ -139,12 +168,17 @@ function update(dt, now) {
     if (keys['s'] || keys['ArrowDown']) dy += 1;
     if (keys['a'] || keys['ArrowLeft']) dx -= 1;
     if (keys['d'] || keys['ArrowRight']) dx += 1;
+    let nextX = player.x, nextY = player.y;
     if (dx !== 0 || dy !== 0) {
         const len = Math.sqrt(dx * dx + dy * dy);
-        player.x += (dx / len) * player.speed;
-        player.y += (dy / len) * player.speed;
-        player.x = Math.max(player.r, Math.min(width - player.r, player.x));
-        player.y = Math.max(player.r, Math.min(height - player.r, player.y));
+        nextX += (dx / len) * player.speed;
+        nextY += (dy / len) * player.speed;
+        // 장애물 충돌 체크
+        let collides = obstacles.some(o => Math.hypot(o.x - nextX, o.y - nextY) < o.r + player.r);
+        if (!collides) {
+            player.x = Math.max(player.r, Math.min(width - player.r, nextX));
+            player.y = Math.max(player.r, Math.min(height - player.r, nextY));
+        }
     }
     // 무적 타이머
     if (player.isInvincible) {
@@ -164,11 +198,16 @@ function update(dt, now) {
     });
     // 투사체 화면 밖 제거
     projectiles = projectiles.filter(p => p.x > -10 && p.x < width + 10 && p.y > -10 && p.y < height + 10);
-    // 적 이동
+    // 적 이동 및 장애물 충돌
     enemies.forEach(e => {
         const angle = Math.atan2(player.y - e.y, player.x - e.x);
-        e.x += Math.cos(angle) * e.speed;
-        e.y += Math.sin(angle) * e.speed;
+        let nx = e.x + Math.cos(angle) * e.speed;
+        let ny = e.y + Math.sin(angle) * e.speed;
+        let collides = obstacles.some(o => Math.hypot(o.x - nx, o.y - ny) < o.r + e.r);
+        if (!collides) {
+            e.x = nx;
+            e.y = ny;
+        }
     });
     // 적과 투사체 충돌
     enemies.forEach(e => {
@@ -180,19 +219,32 @@ function update(dt, now) {
         });
     });
     projectiles = projectiles.filter(p => !p.hit);
-    // 적 제거(죽음) 및 강화
+    // 적 제거(죽음) 및 아이템 드랍
     for (let i = enemies.length - 1; i >= 0; i--) {
         if (enemies[i].hp <= 0) {
             score += 1;
-            // 10% 확률로 강화
-            if (Math.random() < 0.1) {
-                if (Math.random() < 0.5 && autoShotInterval > 200) {
-                    autoShotInterval = Math.max(200, autoShotInterval - 100);
-                } else {
-                    projectileCount++;
-                }
+            // 30% 확률로 아이템 드랍
+            if (Math.random() < 0.3) {
+                let ix = enemies[i].x + (Math.random() - 0.5) * 20;
+                let iy = enemies[i].y + (Math.random() - 0.5) * 20;
+                items.push({ x: ix, y: iy, r: ITEM_RADIUS, color: '#f9d423', timer: 6000 });
             }
             enemies.splice(i, 1);
+        }
+    }
+    // 아이템 획득 처리
+    for (let i = items.length - 1; i >= 0; i--) {
+        items[i].timer -= dt;
+        if (Math.hypot(player.x - items[i].x, player.y - items[i].y) < player.r + items[i].r) {
+            // 50% 확률로 발사속도 0.3초 단축(최소 0.2초), 50% 확률로 탄환 수 +1
+            if (Math.random() < 0.5 && autoShotInterval > 200) {
+                autoShotInterval = Math.max(200, autoShotInterval - 300);
+            } else {
+                projectileCount++;
+            }
+            items.splice(i, 1);
+        } else if (items[i].timer <= 0) {
+            items.splice(i, 1);
         }
     }
     // 적과 플레이어 충돌
@@ -203,6 +255,12 @@ function update(dt, now) {
             player.invincibleTimer = 3000; // 3초
         }
     });
+    // 장애물 스폰
+    lastObstacleSpawn += dt;
+    if (lastObstacleSpawn > obstacleSpawnInterval) {
+        spawnObstacle();
+        lastObstacleSpawn = 0;
+    }
     // 시간, 난이도 증가
     time += dt / 1000;
     if (time - lastEnemySpawn > enemySpawnInterval / 1000) {
@@ -217,8 +275,43 @@ function update(dt, now) {
     }
 }
 
+function drawGrassBackground() {
+    // 초원 배경
+    ctx.fillStyle = '#a8e063';
+    ctx.fillRect(0, 0, width, height);
+    // 랜덤 잔디/꽃
+    for (let i = 0; i < 80; i++) {
+        let gx = Math.random() * width;
+        let gy = Math.random() * height;
+        ctx.fillStyle = Math.random() < 0.8 ? '#7bc043' : '#fdf498';
+        ctx.beginPath();
+        ctx.arc(gx, gy, Math.random() * 2 + 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 function draw() {
-    ctx.clearRect(0, 0, width, height);
+    drawGrassBackground();
+    // 장애물
+    obstacles.forEach(o => {
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+        ctx.fillStyle = o.color;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#333';
+        ctx.stroke();
+    });
+    // 아이템
+    items.forEach(it => {
+        ctx.beginPath();
+        ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2);
+        ctx.fillStyle = it.color;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+    });
     // 플레이어
     ctx.save();
     if (!player.blink) {
