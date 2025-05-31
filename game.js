@@ -1,3 +1,4 @@
+document.addEventListener('DOMContentLoaded', function() {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const width = canvas.width;
@@ -223,3 +224,4 @@ function loop(now) {
 }
 
 resetGame();
+});
